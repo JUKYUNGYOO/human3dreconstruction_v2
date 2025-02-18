@@ -21,7 +21,7 @@ class ModelParams():
     """Parameters of the Gaussian Splatting model.
     Largely inspired by the original implementation of the 3D Gaussian Splatting paper:
     https://github.com/graphdeco-inria/gaussian-splatting
-    """  
+    """
     def __init__(self):
         self.sh_degree = 3
         self.source_path = ""

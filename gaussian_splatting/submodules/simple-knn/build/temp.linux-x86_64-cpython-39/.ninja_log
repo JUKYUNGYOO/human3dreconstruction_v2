@@ -1,0 +1,4 @@
+# ninja log v5
+1	11989	1738651196359833110	/home/keti/dev_jk/SuGaR/gaussian_splatting/submodules/simple-knn/build/temp.linux-x86_64-cpython-39/simple_knn.o	b88078d7f2c4deb1
+1	17377	1738651201751900036	/home/keti/dev_jk/SuGaR/gaussian_splatting/submodules/simple-knn/build/temp.linux-x86_64-cpython-39/ext.o	1d29397365346570
+2	51297	1738651235656323156	/home/keti/dev_jk/SuGaR/gaussian_splatting/submodules/simple-knn/build/temp.linux-x86_64-cpython-39/spatial.o	187f92eb9d018614

@@ -70,91 +70,73 @@ def load_gs_cameras(source_path, gs_output_path, image_resolution=1,
     
     for cam_idx in range(len(camera_transforms)):
         camera_transform = camera_transforms[cam_idx]
-    
-    # Extrinsics
+        
+        # Extrinsics
         rot = np.array(camera_transform['rotation'])
         pos = np.array(camera_transform['position'])
-    
+        
         W2C = np.zeros((4,4))
         W2C[:3, :3] = rot
         W2C[:3, 3] = pos
         W2C[3,3] = 1
-    
+        
         Rt = np.linalg.inv(W2C)
         T = Rt[:3, 3]
         R = Rt[:3, :3].transpose()
-    
-    # Intrinsics
+        
+        # Intrinsics
         width = camera_transform['width']
         height = camera_transform['height']
         fy = camera_transform['fy']
         fx = camera_transform['fx']
         fov_y = focal2fov(fy, height)
         fov_x = focal2fov(fx, width)
-    
-    # GT data
+        
+        # GT data
         id = camera_transform['id']
         name = camera_transform['img_name']
         image_path = os.path.join(image_dir,  name + extension)
-    
+        
         if load_gt_images:
-            image = Image.open(image_path).convert("RGBA")  # ✅ RGBA 유지
-            im_data = np.array(image)
-
-            alpha_mask = im_data[:, :, 3:4] / 255.0  # ✅ alpha 채널 추출 (0~1 범위)
-            # alpha_mask가 1이면 불투명, 0이면 완전 투명한 영역을 나타냄
-
-#         white_background=True → 투명 부분을 흰색(255,255,255)으로 변경
-# 2️⃣ white_background=False → 투명 채널을 제거하고 RGB만 사용
-# alpha_mask가 1인 부분은 원본 색상 유지, 0인 부분은 흰색 배경 적용
-# 배경을 제거하고 사람만 남기기 위해 alpha 채널을 유지 
+            image = Image.open(image_path)
             if white_background:
-                bg = np.array([255, 255, 255, 255])  # ✅ RGBA 배경 (흰색)
+                im_data = np.array(image.convert("RGBA"))
+                bg = np.array([1,1,1])
                 norm_data = im_data / 255.0
-                arr = norm_data[:, :, :3] * alpha_mask + bg[:3] * (1 - alpha_mask)  # ✅ 배경을 흰색으로 설정
-                image = Image.fromarray(np.array(arr * 255.0, dtype=np.uint8), "RGB")  # ✅ RGB 변환 후 alpha 제거
-            else:
-                image = Image.fromarray(im_data[:, :, :3], "RGB")  # ✅ 투명채널 제거 후 RGB사용
-
+                arr = norm_data[:,:,:3] * norm_data[:, :, 3:4] + bg * (1 - norm_data[:, :, 3:4])
+                image = Image.fromarray(np.array(arr*255.0, dtype=np.byte), "RGB")
             orig_w, orig_h = image.size
             downscale_factor = 1
             if image_resolution in [1, 2, 4, 8]:
                 downscale_factor = image_resolution
-
+                # resolution = round(orig_w/(image_resolution)), round(orig_h/(image_resolution))
             if max(orig_h, orig_w) > max_img_size:
                 additional_downscale_factor = max(orig_h, orig_w) / max_img_size
                 downscale_factor = additional_downscale_factor * downscale_factor
-
-            resolution = round(orig_w / downscale_factor), round(orig_h / downscale_factor)
-            resized_image_rgb = PILtoTorch(image, resolution)  # ✅ RGB 변환 후 Tensor 변환
-            resized_alpha_mask = torch.tensor(alpha_mask, dtype=torch.float32).permute(2, 0, 1)  # ✅ alpha mask도 Tensor 변환
-
-            gt_image = resized_image_rgb[:3, ...]  # ✅ 3채널(RGB)로 유지
-            gt_alpha_mask = resized_alpha_mask  # ✅ alpha mask 추가
-            image_height, image_width = resolution  # ✅ 이미지 크기 저장
+            resolution = round(orig_w/(downscale_factor)), round(orig_h/(downscale_factor))
+            resized_image_rgb = PILtoTorch(image, resolution)
+            gt_image = resized_image_rgb[:3, ...]
+            
+            image_height, image_width = None, None
         else:
             gt_image = None
-            gt_alpha_mask = None  # ✅ alpha mask도 None 처리
-
-            downscale_factor = 1  # ✅ 기본값 설정
             if image_resolution in [1, 2, 4, 8]:
                 downscale_factor = image_resolution
+                # resolution = round(orig_w/(image_resolution)), round(orig_h/(image_resolution))
             if max(height, width) > max_img_size:
                 additional_downscale_factor = max(height, width) / max_img_size
                 downscale_factor = additional_downscale_factor * downscale_factor
-            image_height, image_width = round(height / downscale_factor), round(width / downscale_factor)
-
-# alpha mask를 추가해서 사람이 있는 영역과 없는 영역을 분리함. 
+            image_height, image_width = round(height/downscale_factor), round(width/downscale_factor)
+        
         gs_camera = GSCamera(
-            colmap_id=id, image=gt_image, gt_alpha_mask=gt_alpha_mask,  # ✅ alpha mask 추가
+            colmap_id=id, image=gt_image, gt_alpha_mask=None,
             R=R, T=T, FoVx=fov_x, FoVy=fov_y,
             image_name=name, uid=id,
-            image_height=image_height, image_width=image_width)
-    
+            image_height=image_height, image_width=image_width,)
+        
         cam_list.append(gs_camera)
 
     return cam_list
-
 
 
 class GSCamera(torch.nn.Module):
@@ -214,13 +196,6 @@ class GSCamera(torch.nn.Module):
             self.image_height = self.original_image.shape[1]
 
             if gt_alpha_mask is not None:
-                gt_alpha_mask = torch.nn.functional.interpolate(
-                gt_alpha_mask.unsqueeze(0), 
-                size=(self.image_height, self.image_width), 
-                mode="bilinear", 
-                align_corners=False
-                ).squeeze(0)
-
                 self.original_image *= gt_alpha_mask.to(self.data_device)
             else:
                 self.original_image *= torch.ones((1, self.image_height, self.image_width), device=self.data_device)
