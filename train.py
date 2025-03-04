@@ -88,6 +88,15 @@ if __name__ == "__main__":
     # GPU
     parser.add_argument('--gpu', type=int, default=0, help='Index of GPU device to use.')
     parser.add_argument('--white_background', type=str2bool, default=False, help='Use a white background instead of black.')
+    
+    parser.add_argument('--gt_alpha_mask', type=str2bool, default=False, 
+                    help='If True, use ground truth alpha mask to exclude background during training.')
+    
+
+    parser.add_argument('--gt_alpha_mask_path', type=str, default=None, 
+                    help='Path to the folder containing alpha masks.')
+
+
 
     # Parse arguments
     args = parser.parse_args()
@@ -124,6 +133,7 @@ if __name__ == "__main__":
         'normal_factor': 0.2,
         'gpu': args.gpu,
         'white_background': args.white_background,
+        'gt_alpha_mask': args.gt_alpha_mask  # ✅ 알파 마스크 추가
     })
     if args.regularization_type == 'sdf':
         coarse_sugar_path = coarse_training_with_sdf_regularization(coarse_args)
